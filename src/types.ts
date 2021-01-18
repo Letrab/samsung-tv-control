@@ -1,3 +1,6 @@
+
+import { KEYS } from './keys'
+
 export interface Configuration {
   /** IP addess TV */
   ip: string
@@ -27,11 +30,17 @@ export interface App {
   name: string
 }
 
+export enum Commands {
+  Click = "Click",
+  Press = "Press",
+  Release = "Release"
+}
+
 export interface Command {
   method: string
   params: {
-    Cmd?: string
-    DataOfCmd?: string
+    Cmd?: Commands | string
+    DataOfCmd?: KEYS | string
     Option?: string
     TypeOfRemote?: string
     data?: string | object
@@ -45,5 +54,6 @@ export type WSData = {
   data?: {
     token?: string
     data?: App[]
+    message?: string
   }
 }

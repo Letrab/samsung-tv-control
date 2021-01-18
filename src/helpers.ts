@@ -1,4 +1,4 @@
-import { App, Command } from './types'
+import { App, Command, Commands } from './types'
 import { KEYS } from './keys'
 
 export function chr(char: number) {
@@ -17,15 +17,15 @@ export function getVideoId(url: string) {
   return videoId
 }
 
-export function getCommandByKey(key: KEYS): Command {
+export function getCommandByKey(key: KEYS, cmd?: Commands): Command {
   return {
     method: 'ms.remote.control',
     params: {
-      Cmd: 'Click',
+      Cmd: cmd || Commands.Click,
       DataOfCmd: key,
       Option: 'false',
-      TypeOfRemote: 'SendRemoteKey'
-    }
+      TypeOfRemote: 'SendRemoteKey',
+    },
   }
 }
 

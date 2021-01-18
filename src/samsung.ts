@@ -7,7 +7,7 @@ import * as wol from 'wake_on_lan'
 import * as WebSocket from 'ws'
 import { KEYS } from './keys'
 import Logger from './logger'
-import { Configuration, WSData, App, Command } from './types'
+import { Configuration, WSData, App, Command, Commands } from './types'
 import {
   base64,
   chr,
@@ -30,6 +30,9 @@ class Samsung {
   private SAVE_TOKEN: boolean
   private TOKEN_FILE = path.join(__dirname, 'token.txt')
   private WS_URL: string
+  private SOCKET_TIMEOUT: number = 1000 * 60 * 3
+  private socket: WebSocket | undefined
+  private socketTimeout: ReturnType<typeof setTimeout> | undefined
 
   constructor(config: Configuration) {
     if (!config.ip) {
@@ -58,6 +61,7 @@ class Samsung {
       this.TOKEN = this._getTokenFromFile() || ''
     }
     this.WS_URL = this._getWSUrl()
+    this._openSocket(this.WS_URL)
 
     this.LOGGER.log(
       'internal config',
@@ -122,22 +126,34 @@ class Samsung {
 
   public sendKey(
     key: KEYS,
-    done?: (err: Error | { code: string } | null, res: WSData | string | null) => void
+    done?: (err: Error | { code: string } | null, res: WSData | string | null) => void,
+    time?: number
   ) {
     this.LOGGER.log('send key', key, 'sendKey')
     if (this.PORT === 55000) {
       this._sendLegacy(key, done)
     } else {
-      this._send(getCommandByKey(key), done, 'ms.channel.connect')
+      if (time) {
+        this._send(getCommandByKey(key, Commands.Press), undefined, 'ms.channel.connect')
+        setTimeout(() => this._send(getCommandByKey(key, Commands.Release), done, 'ms.channel.connect'), time)
+      } else {
+        this._send(getCommandByKey(key), done, 'ms.channel.connect')
+      }
     }
   }
 
-  public sendKeyPromise(key: KEYS) {
+  public async sendKeyPromise(key: KEYS, time?: number) {
     this.LOGGER.log('send key', key, 'sendKeyPromise')
     if (this.PORT === 55000) {
-      return this._sendLegacyPromise(key)
+      await this._sendLegacyPromise(key)
     } else {
-      return this._sendPromise(getCommandByKey(key), 'ms.channel.connect')
+      if (time) {
+        await this._sendAsync(getCommandByKey(key, Commands.Press))
+        await this._delay(time)
+        await this._sendAsync(getCommandByKey(key, Commands.Release))
+      } else {
+        await this._sendAsync(getCommandByKey(key))
+      }
     }
   }
 
@@ -385,7 +401,6 @@ class Samsung {
     })
   }
 
-
   private _sendPromise(command: Command, eventHandle?: string): Promise<WSData | null> {
     return new Promise((resolve, reject) => {
       this._send(
@@ -400,6 +415,90 @@ class Samsung {
         eventHandle
       )
     })
+  }
+
+  private async _sendAsync(data: Command) {
+    await this._checkSocket()
+
+    // this.device.log.debug(data);
+    await new Promise<void>((resolve, reject) => {
+      if (this.socket) {
+        this.socket.send(JSON.stringify(data), (error) => {
+          if (error) {
+            reject(new Error(error.message))
+          }
+          resolve()
+        })
+      } else {
+        reject('Socket does not exist')
+      }
+    })
+  }
+
+  private async _checkSocket() {
+    if (this.socket && this.socket.OPEN) {
+      if (this.socketTimeout) {
+        clearTimeout(this.socketTimeout)
+      }
+      this.socketTimeout = setTimeout(() => this._closeSocket(), this.SOCKET_TIMEOUT)
+
+      return true
+    }
+
+    try {
+      await this._openSocket(this.WS_URL)
+      await this._delay(150)
+    } catch (error) {
+      throw new Error(error.message)
+    }
+  }
+
+  private _openSocket(url: string) {
+    return new Promise<void | App[] | string>((resolve, reject) => {
+      this.socket = new WebSocket(url, {
+        rejectUnauthorized: false,
+      })
+        .on('error', (error) => {
+          reject(new Error(error.message))
+        })
+        .on('close', () => {
+          this.socket = undefined
+        })
+        .on('message', (response: string) => {
+          const wsData: WSData = JSON.parse(response)
+
+          if (wsData.event === 'ms.channel.connect') {
+            resolve()
+
+            this.socketTimeout = setTimeout(() => this._closeSocket(), this.SOCKET_TIMEOUT)
+          } else if (wsData.event === 'ed.installedApp.get') {
+            if (wsData.data && wsData.data.data)
+              resolve(wsData.data.data);
+            else
+              reject("No app data")
+          } else if (wsData.event === 'ms.error') {
+            if (wsData.data)
+              resolve(wsData.data.message);
+            else
+              reject("ms.error")
+              //this.device.log.debug((new SocketResponseError(wsData.data.message)).stack);
+          } else {
+            reject(new Error(response))
+          }
+
+          //this.device.log.debug(wsData);
+        })
+    })
+  }
+
+  private _closeSocket() {
+    if (this.socket) {
+      this.socket.close()
+    }
+  }
+
+  private _delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms || 400))
   }
 
   private _sendLegacy(key: KEYS, done?: (err: null | Error | { code: string }, res: string) => void) {
