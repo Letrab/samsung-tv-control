@@ -148,11 +148,15 @@ class Samsung {
       await this._sendLegacyPromise(key)
     } else {
       if (time) {
+        try {
         await this._sendAsync(getCommandByKey(key, Commands.Press))
         await this._delay(time)
         await this._sendAsync(getCommandByKey(key, Commands.Release))
+        } catch(error) { console.log(error) }
       } else {
-        await this._sendAsync(getCommandByKey(key))
+        try {
+          await this._sendAsync(getCommandByKey(key))
+        } catch (error) { console.log(error) }
       }
     }
   }
@@ -297,11 +301,11 @@ class Samsung {
               { request: res.request, body: res.body as string, code: res.statusCode },
               'isAvailable'
             )
-            resolve(true)
+            return resolve(true)
           }
 
           this.LOGGER.error('TV is not available', { err }, 'isAvailable')
-          resolve(false)
+          return resolve(false)
         }
       )
     })
@@ -455,6 +459,7 @@ class Samsung {
 
   private _openSocket(url: string) {
     return new Promise<void | App[] | string>((resolve, reject) => {
+      try {
       this.socket = new WebSocket(url, {
         rejectUnauthorized: false,
       })
@@ -488,6 +493,7 @@ class Samsung {
 
           //this.device.log.debug(wsData);
         })
+      } catch(error) { reject(error) }
     })
   }
 
