@@ -7,22 +7,20 @@ import { $enum } from 'ts-enum-util'
 
 const config = {
   debug: true, // Default: false
-  ip: '192.168.0.138',
-  mac: '98063ca16b42',
+  ip: '192.168.1.2',
+  mac: '123456789ABC',
   nameApp: 'NodeJS-Test', // Default: NodeJS
-  token: "57112482",
   saveToken: true
 }
 
 const control = new Samsung(config)
 
 async function main() {
-  try {
   await control.turnOn()
   await control.isAvailable()
 
-  // let token = await control.getTokenPromise()
-  // console.log('$$ token:', token)
+  let token = await control.getTokenPromise()
+  console.log('$$ token:', token)
 
   /*
     Typescript Example
@@ -33,16 +31,14 @@ async function main() {
     }
   */
 
+  await control.sendKeyPromise(KEYS.KEY_HOME)
+  await control.sendTextPromise('Text to be inserted in some focused input')
+  await control.getAppsFromTVPromise()
+  await control.openApp(APPS.Spotify)
+  // await control.openApp(APPS.YouTube)
   await control.sendKeyPromise(KEYS.KEY_POWER)
-  // await control.sendTextPromise('Text to be inserted in some focused input')
-  // await control.getAppsFromTVPromise()
-  // await control.openApp(APPS.Spotify)
-  // // await control.openApp(APPS.YouTube)
-  // await control.sendKeyPromise(KEYS.KEY_POWER)
   await control.getLogs()
-  // control.closeConnection()
-  }
-  catch(error) { console.log(error) }
+  control.closeConnection()
   return
 }
 
